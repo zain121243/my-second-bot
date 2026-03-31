@@ -11,8 +11,10 @@ user_links = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "✨ ياعلي مدد ✨\n\n"
-        "📥 ارسل رابط الفيديو\n"
-        "وسيتم خدمتك بأفضل جودة 🔥"
+        "🤖 بوت تحميل الفيديوهات\n\n"
+        "📥 يدعم:\n"
+        "YouTube | TikTok | Instagram | Twitter | Facebook\n\n"
+        "🔗 ارسل الرابط الآن"
     )
 
 # 📩 استقبال الرابط
@@ -41,26 +43,31 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# ⬇️ تحميل الفيديو
+# ⬇️ تحميل الفيديو (يدعم كل المواقع)
 def download_video(url, quality):
+    ydl_opts = {
+        'outtmpl': 'download.%(ext)s',
+        'quiet': True,
+        'noplaylist': True
+    }
+
     if quality == "audio":
-        ydl_opts = {
+        ydl_opts.update({
             'format': 'bestaudio',
-            'outtmpl': 'audio.%(ext)s',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
             }]
-        }
+        })
     else:
-        ydl_opts = {
-            'format': f'bestvideo[height<={quality}]+bestaudio/best',
-            'outtmpl': 'video.%(ext)s'
-        }
+        ydl_opts.update({
+            'format': f'bestvideo[height<={quality}]+bestaudio/best'
+        })
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
+        file_path = ydl.prepare_filename(info)
+        return file_path
 
 # 🎯 عند الضغط على زر
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,7 +80,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         "⏳ ياعلي مدد...\n"
-        "انتظر قليلاً سيتم تنزيل الفيديو أو الصوت 📥"
+        "انتظر قليلاً جاري التحميل 📥"
     )
 
     try:
@@ -92,13 +99,13 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption="🎥 تم التحميل بنجاح\nياعلي مدد ✨"
             )
 
-        # حذف الملف بعد الإرسال (مهم للسيرفر)
+        # 🧹 حذف الملف بعد الإرسال
         os.remove(file_path)
 
     except Exception as e:
         await context.bot.send_message(
             chat_id=user_id,
-            text=f"❌ حدث خطأ:\n{e}"
+            text=f"❌ صار خطأ:\n{e}"
         )
 
 # 🚀 تشغيل البوت

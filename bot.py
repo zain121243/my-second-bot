@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = os.getenv("token")
-CHANNEL = "@jbt_313"  # 🔥 غيره
+CHANNEL = "@your_channel"  # 🔥 غيره
 
 user_links = {}
 last_request_time = {}
@@ -35,11 +35,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "✨ ياعلي مدد ✨\n\n"
-        "🤖 أقوى بوت تحميل\n\n"
+        "🤖 بوت تحميل الفيديوهات الاحترافي\n\n"
         "📥 ارسل الرابط الآن"
     )
 
-# 📩 استقبال الرابط
+# 📩 استقبال الرابط (🔥 نسخة محسنة)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -58,17 +58,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     last_request_time[user_id] = now
 
-    url = update.message.text
+    url = update.message.text.strip()
+
+    if not url.startswith(("http://", "https://")):
+        await update.message.reply_text("❌ ارسل رابط صحيح")
+        return
+
     user_links[user_id] = url
 
     try:
-        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+        info_opts = {
+            'quiet': True,
+            'noplaylist': True,
+            'geo_bypass': True,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['android', 'web']
+                }
+            },
+            'http_headers': {
+                'User-Agent': 'com.google.android.youtube/17.31.35'
+            }
+        }
+
+        with yt_dlp.YoutubeDL(info_opts) as ydl:
             info = ydl.extract_info(url, download=False)
-            title = info.get("title", "بدون عنوان")
-            thumbnail = info.get("thumbnail")
-            duration = info.get("duration", 0)
+
+        title = info.get("title", "بدون عنوان")
+        thumbnail = info.get("thumbnail")
+        duration = info.get("duration", 0) or 0
 
         minutes = duration // 60
+        seconds = duration % 60
 
         keyboard = [
             [InlineKeyboardButton("🎥 360p", callback_data="360"),
@@ -77,14 +98,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
         ]
 
-        await update.message.reply_photo(
-            photo=thumbnail,
-            caption=f"🎬 {title}\n⏱️ {minutes} دقيقة\n\nاختر الجودة\nياعلي مدد ✨",
-            reply_markup=InlineKeyboardMarkup(keyboard)
+        caption = (
+            f"🎬 {title}\n"
+            f"⏱️ {minutes}:{seconds:02d}\n\n"
+            "اختر الجودة\n"
+            "ياعلي مدد ✨"
         )
 
-    except:
-        await update.message.reply_text("❌ رابط غير مدعوم")
+        if thumbnail:
+            await update.message.reply_photo(
+                photo=thumbnail,
+                caption=caption,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        else:
+            await update.message.reply_text(
+                caption,
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+
+    except Exception as e:
+        await update.message.reply_text(f"❌ تعذر قراءة الرابط:\n{e}")
 
 # ⬇️ تحميل
 def download_video(url, quality):
@@ -95,8 +129,11 @@ def download_video(url, quality):
         'geo_bypass': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android']
+                'player_client': ['android', 'web']
             }
+        },
+        'http_headers': {
+            'User-Agent': 'com.google.android.youtube/17.31.35'
         }
     }
 
@@ -124,12 +161,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
-    # زر تحقق
     if query.data == "check":
         if await check_join(user_id, context.bot):
-            await query.edit_message_text("✅ تم التحقق، أرسل الرابط الآن")
+            await query.edit_message_text("✅ تم التحقق، ارسل الرابط الآن")
         else:
-            await query.answer("❌ لم تشترك بعد", show_alert=True)
+            await query.answer("❌ لم تشترك", show_alert=True)
         return
 
     quality = query.data

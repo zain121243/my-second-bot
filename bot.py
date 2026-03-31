@@ -40,7 +40,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📥 ارسل الرابط الآن"
     )
 
-# 📩 استقبال الرابط (🔥 بدون مشاكل يوتيوب)
+# 📩 استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -73,7 +73,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
     ]
 
-    # 🔥 إذا يوتيوب → بدون قراءة
+    # 🔥 يوتيوب بدون قراءة (تجنب الحظر)
     if "youtube.com" in url or "youtu.be" in url:
         await update.message.reply_text(
             "🎬 رابط يوتيوب جاهز\nاختر الجودة\nياعلي مدد ✨",
@@ -81,7 +81,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # 🔥 باقي المواقع نحاول نجيب معلومات
+    # 🔥 باقي المواقع
     try:
         with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
             info = ydl.extract_info(url, download=False)
@@ -107,31 +107,40 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-# ⬇️ تحميل (🔥 يوتيوب API + باقي المواقع yt-dlp)
+# ⬇️ تحميل
 def download_video(url, quality):
 
-    # 🔥 يوتيوب
+    # 🔥 يوتيوب API
     if "youtube.com" in url or "youtu.be" in url:
-        api_url = "https://cobalt.tools/api/json"
+        try:
+            api_url = "https://api.cobalt.tools/api/json"
 
-        data = {
-            "url": url,
-            "vQuality": quality if quality != "audio" else "max",
-            "isAudioOnly": True if quality == "audio" else False
-        }
+            data = {
+                "url": url,
+                "vQuality": quality if quality != "audio" else "max",
+                "isAudioOnly": True if quality == "audio" else False
+            }
 
-        headers = {
-            "Accept": "application/json",
-            "Content-Type": "application/json"
-        }
+            headers = {
+                "Accept": "application/json",
+                "Content-Type": "application/json",
+                "User-Agent": "Mozilla/5.0"
+            }
 
-        res = requests.post(api_url, json=data, headers=headers)
-        result = res.json()
+            res = requests.post(api_url, json=data, headers=headers, timeout=15)
 
-        if result.get("status") == "success":
-            return result["url"]
-        else:
-            raise Exception("فشل تحميل من API")
+            if not res.text:
+                raise Exception("API فارغ")
+
+            result = res.json()
+
+            if result.get("status") == "success":
+                return result["url"]
+            else:
+                raise Exception(result)
+
+        except Exception as e:
+            raise Exception(f"❌ فشل تحميل يوتيوب:\n{e}")
 
     # 🔥 باقي المواقع
     ydl_opts = {
@@ -164,6 +173,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_id = query.from_user.id
 
+    # زر تحقق
     if query.data == "check":
         if await check_join(user_id, context.bot):
             await query.edit_message_text("✅ تم التحقق، ارسل الرابط الآن")
@@ -174,12 +184,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quality = query.data
     url = user_links.get(user_id)
 
-    await query.edit_message_text("⏳ جاري التحميل... يا علي مدد")
+    await query.edit_message_text("⏳ ياعلي مدد...\nجاري التحميل 📥")
 
     try:
         file_path = download_video(url, quality)
 
-        # 🔥 إذا رابط مباشر
+        # 🔥 رابط مباشر (يوتيوب)
         if isinstance(file_path, str) and file_path.startswith("http"):
             if quality == "audio":
                 await context.bot.send_audio(user_id, audio=file_path)
@@ -194,7 +204,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             os.remove(file_path)
 
     except Exception as e:
-        await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
+        await context.bot.send_message(user_id, f"{e}")
 
 # 🚀 تشغيل
 app = ApplicationBuilder().token(TOKEN).build()

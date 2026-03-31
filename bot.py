@@ -5,7 +5,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = os.getenv("token")
-CHANNEL = "@your_channel"  # 🔥 غيره
+CHANNEL = "@jbt_313"  # 🔥 غيره
 
 user_links = {}
 last_request_time = {}

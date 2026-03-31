@@ -6,7 +6,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = os.getenv("token")
-CHANNEL = "@jbt_313"  # 🔥 غيره
+CHANNEL = "@jbt_313"  # 🔥 غيره إلى قناتك
 
 user_links = {}
 last_request_time = {}
@@ -40,7 +40,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📥 ارسل الرابط الآن"
     )
 
-# 📩 استقبال الرابط
+# 📩 استقبال الرابط (🔥 بدون مشاكل يوتيوب)
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -66,50 +66,51 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_links[user_id] = url
 
+    keyboard = [
+        [InlineKeyboardButton("🎥 360p", callback_data="360"),
+         InlineKeyboardButton("🎥 720p", callback_data="720")],
+        [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
+        [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
+    ]
+
+    # 🔥 إذا يوتيوب → بدون قراءة
+    if "youtube.com" in url or "youtu.be" in url:
+        await update.message.reply_text(
+            "🎬 رابط يوتيوب جاهز\nاختر الجودة\nياعلي مدد ✨",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
+    # 🔥 باقي المواقع نحاول نجيب معلومات
     try:
         with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
             info = ydl.extract_info(url, download=False)
 
         title = info.get("title", "بدون عنوان")
         thumbnail = info.get("thumbnail")
-        duration = info.get("duration", 0) or 0
-
-        minutes = duration // 60
-        seconds = duration % 60
-
-        keyboard = [
-            [InlineKeyboardButton("🎥 360p", callback_data="360"),
-             InlineKeyboardButton("🎥 720p", callback_data="720")],
-            [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
-            [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
-        ]
-
-        caption = (
-            f"🎬 {title}\n"
-            f"⏱️ {minutes}:{seconds:02d}\n\n"
-            "اختر الجودة\n"
-            "ياعلي مدد ✨"
-        )
 
         if thumbnail:
             await update.message.reply_photo(
                 photo=thumbnail,
-                caption=caption,
+                caption=f"🎬 {title}\nاختر الجودة\nياعلي مدد ✨",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
         else:
             await update.message.reply_text(
-                caption,
+                f"🎬 {title}\nاختر الجودة\nياعلي مدد ✨",
                 reply_markup=InlineKeyboardMarkup(keyboard)
             )
 
-    except Exception as e:
-        await update.message.reply_text(f"❌ تعذر قراءة الرابط:\n{e}")
+    except:
+        await update.message.reply_text(
+            "🎬 الرابط جاهز\nاختر الجودة\nياعلي مدد ✨",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 
-# ⬇️ تحميل (🔥 نسخة نهائية)
+# ⬇️ تحميل (🔥 يوتيوب API + باقي المواقع yt-dlp)
 def download_video(url, quality):
 
-    # 🔥 يوتيوب → API خارجي
+    # 🔥 يوتيوب
     if "youtube.com" in url or "youtu.be" in url:
         api_url = "https://cobalt.tools/api/json"
 
@@ -173,12 +174,12 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     quality = query.data
     url = user_links.get(user_id)
 
-    await query.edit_message_caption("⏳ جاري التحميل... يا علي مدد")
+    await query.edit_message_text("⏳ جاري التحميل... يا علي مدد")
 
     try:
         file_path = download_video(url, quality)
 
-        # 🔥 إذا رابط مباشر (يوتيوب API)
+        # 🔥 إذا رابط مباشر
         if isinstance(file_path, str) and file_path.startswith("http"):
             if quality == "audio":
                 await context.bot.send_audio(user_id, audio=file_path)

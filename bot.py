@@ -11,10 +11,10 @@ user_links = {}
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "✨ ياعلي مدد ✨\n\n"
-        "🤖 بوت تحميل الفيديوهات\n\n"
-        "📥 يدعم:\n"
+        "🤖 بوت تحميل الفيديوهات\n"
+        "يدعم:\n"
         "YouTube | TikTok | Instagram | Twitter | Facebook\n\n"
-        "🔗 ارسل الرابط الآن"
+        "📥 ارسل الرابط الآن"
     )
 
 # 📩 استقبال الرابط
@@ -38,17 +38,27 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        "📊 اختر الجودة المطلوبة:\n"
-        "ياعلي مدد ✨",
+        "📊 اختر الجودة:\nياعلي مدد ✨",
         reply_markup=reply_markup
     )
 
-# ⬇️ تحميل الفيديو (يدعم كل المواقع)
+# ⬇️ تحميل الفيديو (نسخة محسنة)
 def download_video(url, quality):
     ydl_opts = {
         'outtmpl': 'download.%(ext)s',
         'quiet': True,
-        'noplaylist': True
+        'noplaylist': True,
+        'nocheckcertificate': True,
+        'geo_bypass': True,
+        'geo_bypass_country': 'US',
+        'http_headers': {
+            'User-Agent': 'Mozilla/5.0'
+        },
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['android']
+            }
+        }
     }
 
     if quality == "audio":
@@ -66,8 +76,7 @@ def download_video(url, quality):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        file_path = ydl.prepare_filename(info)
-        return file_path
+        return ydl.prepare_filename(info)
 
 # 🎯 عند الضغط على زر
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,7 +108,6 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 caption="🎥 تم التحميل بنجاح\nياعلي مدد ✨"
             )
 
-        # 🧹 حذف الملف بعد الإرسال
         os.remove(file_path)
 
     except Exception as e:

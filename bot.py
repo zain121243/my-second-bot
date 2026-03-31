@@ -3,7 +3,7 @@ import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-TOKEN = os.getenv("token")
+TOKEN = os.getenv("TOKEN")
 
 user_links = {}
 
@@ -42,23 +42,26 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=reply_markup
     )
 
-# ⬇️ تحميل الفيديو (نسخة محسنة)
+# ⬇️ تحميل الفيديو (🔥 نسخة قوية بدون cookies)
 def download_video(url, quality):
+
     ydl_opts = {
         'outtmpl': 'download.%(ext)s',
         'quiet': True,
         'noplaylist': True,
-        'nocheckcertificate': True,
-        'geo_bypass': True,
-        'geo_bypass_country': 'US',
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0'
-        },
+
+        # 🔥 حل مشكلة يوتيوب
         'extractor_args': {
             'youtube': {
-                'player_client': ['android']
+                'player_client': ['android', 'web']
             }
-        }
+        },
+
+        'http_headers': {
+            'User-Agent': 'com.google.android.youtube/17.31.35'
+        },
+
+        'geo_bypass': True,
     }
 
     if quality == "audio":

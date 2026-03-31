@@ -1,67 +1,103 @@
 import os
 import yt_dlp
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-TOKEN = os.getenv("token")
+TOKEN = os.getenv("TOKEN")
+CHANNEL = "@jbt_313"  # 🔥 غيره
 
 user_links = {}
+last_request_time = {}
 
-# 🌟 رسالة البداية
+# 🔒 تحقق الاشتراك
+async def check_join(user_id, bot):
+    try:
+        member = await bot.get_chat_member(CHANNEL, user_id)
+        return member.status in ["member", "administrator", "creator"]
+    except:
+        return False
+
+# 🌟 start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+
+    if not await check_join(user_id, context.bot):
+        keyboard = [
+            [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@','')}")],
+            [InlineKeyboardButton("✅ تحقق", callback_data="check")]
+        ]
+        await update.message.reply_text(
+            "🔒 اشترك بالقناة أولاً\nياعلي مدد ✨",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+        return
+
     await update.message.reply_text(
         "✨ ياعلي مدد ✨\n\n"
-        "🤖 بوت تحميل الفيديوهات\n"
-        "يدعم:\n"
-        "YouTube | TikTok | Instagram | Twitter | Facebook\n\n"
+        "🤖 أقوى بوت تحميل\n\n"
         "📥 ارسل الرابط الآن"
     )
 
 # 📩 استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    url = update.message.text
-    user_links[update.effective_user.id] = url
+    user_id = update.effective_user.id
 
-    keyboard = [
-        [
-            InlineKeyboardButton("🎥 360p", callback_data="360"),
-            InlineKeyboardButton("🎥 720p", callback_data="720"),
-        ],
-        [
-            InlineKeyboardButton("🎥 1080p", callback_data="1080"),
-        ],
-        [
-            InlineKeyboardButton("🎧 صوت فقط", callback_data="audio")
+    if not await check_join(user_id, context.bot):
+        keyboard = [
+            [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@','')}")],
+            [InlineKeyboardButton("✅ تحقق", callback_data="check")]
         ]
-    ]
+        await update.message.reply_text("🔒 اشترك أولاً", reply_markup=InlineKeyboardMarkup(keyboard))
+        return
 
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    # 🛑 سبام
+    now = asyncio.get_event_loop().time()
+    if user_id in last_request_time and now - last_request_time[user_id] < 5:
+        await update.message.reply_text("⏳ انتظر قليلاً")
+        return
+    last_request_time[user_id] = now
 
-    await update.message.reply_text(
-        "📊 اختر الجودة:\nياعلي مدد ✨",
-        reply_markup=reply_markup
-    )
+    url = update.message.text
+    user_links[user_id] = url
 
-# ⬇️ تحميل الفيديو (🔥 نسخة قوية بدون cookies)
+    try:
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+            info = ydl.extract_info(url, download=False)
+            title = info.get("title", "بدون عنوان")
+            thumbnail = info.get("thumbnail")
+            duration = info.get("duration", 0)
+
+        minutes = duration // 60
+
+        keyboard = [
+            [InlineKeyboardButton("🎥 360p", callback_data="360"),
+             InlineKeyboardButton("🎥 720p", callback_data="720")],
+            [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
+            [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
+        ]
+
+        await update.message.reply_photo(
+            photo=thumbnail,
+            caption=f"🎬 {title}\n⏱️ {minutes} دقيقة\n\nاختر الجودة\nياعلي مدد ✨",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    except:
+        await update.message.reply_text("❌ رابط غير مدعوم")
+
+# ⬇️ تحميل
 def download_video(url, quality):
-
     ydl_opts = {
-        'outtmpl': 'download.%(ext)s',
+        'outtmpl': 'file.%(ext)s',
         'quiet': True,
         'noplaylist': True,
-
-        # 🔥 حل مشكلة يوتيوب
+        'geo_bypass': True,
         'extractor_args': {
             'youtube': {
-                'player_client': ['android', 'web']
+                'player_client': ['android']
             }
-        },
-
-        'http_headers': {
-            'User-Agent': 'com.google.android.youtube/17.31.35'
-        },
-
-        'geo_bypass': True,
+        }
     }
 
     if quality == "audio":
@@ -81,45 +117,40 @@ def download_video(url, quality):
         info = ydl.extract_info(url, download=True)
         return ydl.prepare_filename(info)
 
-# 🎯 عند الضغط على زر
+# 🎯 الأزرار
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
+
+    # زر تحقق
+    if query.data == "check":
+        if await check_join(user_id, context.bot):
+            await query.edit_message_text("✅ تم التحقق، أرسل الرابط الآن")
+        else:
+            await query.answer("❌ لم تشترك بعد", show_alert=True)
+        return
+
     quality = query.data
     url = user_links.get(user_id)
 
-    await query.edit_message_text(
-        "⏳ ياعلي مدد...\n"
-        "انتظر قليلاً جاري التحميل 📥"
-    )
+    await query.edit_message_caption("⏳ جاري التحميل... يا علي مدد")
 
     try:
         file_path = download_video(url, quality)
 
         if quality == "audio":
-            await context.bot.send_audio(
-                chat_id=user_id,
-                audio=open(file_path, 'rb'),
-                caption="🎧 تم التحميل بنجاح\nياعلي مدد ✨"
-            )
+            await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
         else:
-            await context.bot.send_video(
-                chat_id=user_id,
-                video=open(file_path, 'rb'),
-                caption="🎥 تم التحميل بنجاح\nياعلي مدد ✨"
-            )
+            await context.bot.send_video(user_id, video=open(file_path, 'rb'))
 
         os.remove(file_path)
 
     except Exception as e:
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=f"❌ صار خطأ:\n{e}"
-        )
+        await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
 
-# 🚀 تشغيل البوت
+# 🚀 تشغيل
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))

@@ -1,6 +1,7 @@
 import os
 import yt_dlp
 import asyncio
+import requests
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
@@ -39,7 +40,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📥 ارسل الرابط الآن"
     )
 
-# 📩 استقبال الرابط (🔥 نسخة محسنة)
+# 📩 استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -51,7 +52,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("🔒 اشترك أولاً", reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
-    # 🛑 سبام
     now = asyncio.get_event_loop().time()
     if user_id in last_request_time and now - last_request_time[user_id] < 5:
         await update.message.reply_text("⏳ انتظر قليلاً")
@@ -67,21 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_links[user_id] = url
 
     try:
-        info_opts = {
-            'quiet': True,
-            'noplaylist': True,
-            'geo_bypass': True,
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'web']
-                }
-            },
-            'http_headers': {
-                'User-Agent': 'com.google.android.youtube/17.31.35'
-            }
-        }
-
-        with yt_dlp.YoutubeDL(info_opts) as ydl:
+        with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
             info = ydl.extract_info(url, download=False)
 
         title = info.get("title", "بدون عنوان")
@@ -120,21 +106,37 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"❌ تعذر قراءة الرابط:\n{e}")
 
-# ⬇️ تحميل
+# ⬇️ تحميل (🔥 نسخة نهائية)
 def download_video(url, quality):
+
+    # 🔥 يوتيوب → API خارجي
+    if "youtube.com" in url or "youtu.be" in url:
+        api_url = "https://cobalt.tools/api/json"
+
+        data = {
+            "url": url,
+            "vQuality": quality if quality != "audio" else "max",
+            "isAudioOnly": True if quality == "audio" else False
+        }
+
+        headers = {
+            "Accept": "application/json",
+            "Content-Type": "application/json"
+        }
+
+        res = requests.post(api_url, json=data, headers=headers)
+        result = res.json()
+
+        if result.get("status") == "success":
+            return result["url"]
+        else:
+            raise Exception("فشل تحميل من API")
+
+    # 🔥 باقي المواقع
     ydl_opts = {
         'outtmpl': 'file.%(ext)s',
         'quiet': True,
         'noplaylist': True,
-        'geo_bypass': True,
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web']
-            }
-        },
-        'http_headers': {
-            'User-Agent': 'com.google.android.youtube/17.31.35'
-        }
     }
 
     if quality == "audio":
@@ -176,12 +178,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         file_path = download_video(url, quality)
 
-        if quality == "audio":
-            await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
+        # 🔥 إذا رابط مباشر (يوتيوب API)
+        if isinstance(file_path, str) and file_path.startswith("http"):
+            if quality == "audio":
+                await context.bot.send_audio(user_id, audio=file_path)
+            else:
+                await context.bot.send_video(user_id, video=file_path)
         else:
-            await context.bot.send_video(user_id, video=open(file_path, 'rb'))
+            if quality == "audio":
+                await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
+            else:
+                await context.bot.send_video(user_id, video=open(file_path, 'rb'))
 
-        os.remove(file_path)
+            os.remove(file_path)
 
     except Exception as e:
         await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")

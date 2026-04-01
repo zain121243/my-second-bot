@@ -51,16 +51,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # التحميل
 def download_video(url, quality):
 
-    base_opts = {
+    ydl_opts = {
         'outtmpl': 'file.%(ext)s',
         'noplaylist': True,
         'cookiefile': COOKIE_FILE,
         'quiet': True,
     }
 
-    # صوت
+    # 🎧 صوت (🔥 إصلاح المشكلة فقط)
     if quality == "audio":
-        base_opts.update({
+        ydl_opts.update({
             'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
@@ -68,26 +68,18 @@ def download_video(url, quality):
             }]
         })
 
-        with yt_dlp.YoutubeDL(base_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+    # 🎥 فيديو (🔥 نرجع للوضع الطبيعي بدون تعقيد)
+    else:
+        ydl_opts.update({
+            'format': 'best'
+        })
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+
+        if quality == "audio":
             return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
-
-    # فيديو (🔥 بدون خطأ)
-    try:
-        opts = base_opts.copy()
-        opts['format'] = f'bestvideo[height<={quality}]+bestaudio'
-
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            return ydl.prepare_filename(info)
-
-    except:
-        # fallback نهائي
-        opts = base_opts.copy()
-        opts['format'] = 'best'
-
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+        else:
             return ydl.prepare_filename(info)
 
 # الأزرار

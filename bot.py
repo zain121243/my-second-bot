@@ -7,6 +7,9 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 TOKEN = os.getenv("token")
 CHANNEL = "@jbt_313"
 
+if not TOKEN:
+    raise ValueError("❌ حط التوكن بمتغير البيئة باسم token")
+
 user_links = {}
 last_request_time = {}
 
@@ -33,9 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    await update.message.reply_text(
-        "✨ ياعلي مدد ✨\n\n📥 ارسل الرابط"
-    )
+    await update.message.reply_text("✨ ياعلي مدد ✨\n\n📥 ارسل الرابط")
 
 # 📩 استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -75,7 +76,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ⬇️ تحميل
+# ⬇️ تحميل (🔥 بدون cookies + مقاومة الحظر)
 def download_video(url, quality):
 
     ydl_opts = {
@@ -84,16 +85,27 @@ def download_video(url, quality):
         'noplaylist': True,
         'geo_bypass': True,
         'nocheckcertificate': True,
+        'force_ipv4': True,
+
+        # 🔥 انتحال جهاز اندرويد
         'http_headers': {
-            'User-Agent': 'Mozilla/5.0'
+            'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; Android 11)'
         },
+
+        # 🔥 تغيير الـ player لتقليل الحظر
         'extractor_args': {
             'youtube': {
-                'player_client': ['android']
+                'player_client': ['android', 'web'],
+                'skip': ['hls', 'dash']
             }
-        }
+        },
+
+        # 🔥 تقليل كشف البوت
+        'sleep_interval': 1,
+        'max_sleep_interval': 3,
     }
 
+    # 🎧 صوت
     if quality == "audio":
         ydl_opts.update({
             'format': 'ba/b',
@@ -103,6 +115,8 @@ def download_video(url, quality):
                 'preferredquality': '192',
             }]
         })
+
+    # 🎥 فيديو
     else:
         ydl_opts.update({
             'format': f'bestvideo[height<={quality}]+bestaudio/best'

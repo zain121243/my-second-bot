@@ -1,9 +1,10 @@
 import os
-import subprocess
+import yt_dlp
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = os.getenv("token")
+
 user_links = {}
 
 # start
@@ -15,6 +16,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     url = update.message.text.strip()
 
+    if not url.startswith("http"):
+        await update.message.reply_text("❌ رابط غير صحيح")
+        return
+
     user_links[user_id] = url
 
     keyboard = [
@@ -24,20 +29,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# تحميل فعلي (🔥 نفس التيرمنال)
+# تحميل
 def download(url, mode):
+    ydl_opts = {
+        'outtmpl': 'file.%(ext)s',
+        'quiet': True,
+        'noplaylist': True,
+    }
 
     if mode == "audio":
-        cmd = f'yt-dlp -x --audio-format mp3 -o "file.%(ext)s" "{url}"'
+        ydl_opts.update({
+            'format': 'bestaudio',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+            }]
+        })
     else:
-        cmd = f'yt-dlp -o "file.%(ext)s" "{url}"'
+        # 🔥 بدون أي فورمات (هذا السر)
+        pass
 
-    subprocess.run(cmd, shell=True)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
+        filename = ydl.prepare_filename(info)
 
-    # البحث عن الملف
-    for file in os.listdir():
-        if file.startswith("file."):
-            return file
+        if mode == "audio":
+            return os.path.splitext(filename)[0] + ".mp3"
+        else:
+            return filename
 
 # الأزرار
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -47,6 +66,10 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     mode = query.data
     url = user_links.get(user_id)
+
+    if not url:
+        await context.bot.send_message(user_id, "❌ ارسل الرابط أولاً")
+        return
 
     await query.edit_message_text("⏳ جاري التحميل...")
 

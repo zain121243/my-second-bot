@@ -4,7 +4,7 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-TOKEN = os.getenv("8642196903:AAFjfz1pMGY0VnoHvZThzW3ORamwqm9dOiY")
+TOKEN = os.getenv("token")
 CHANNEL = "@jbt_313"
 
 user_links = {}

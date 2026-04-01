@@ -8,7 +8,7 @@ TOKEN = os.getenv("token")
 COOKIE_FILE = "www.youtube.com_cookies.txt"
 
 if not TOKEN or TOKEN == "token":
-    raise ValueError("❌ التوكن غلط! حطه في Railway Variables باسم token")
+    raise ValueError("❌ التوكن غلط")
 
 user_links = {}
 
@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    url = (update.message.text or "").strip()
+    url = update.message.text.strip()
 
     if not url.startswith("http"):
         await update.message.reply_text("❌ رابط غير صحيح")
@@ -29,45 +29,54 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     keyboard = [
         [InlineKeyboardButton("🎥 فيديو", callback_data="video")],
-        [InlineKeyboardButton("🎧 صوت MP3", callback_data="audio")]
+        [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
     ]
 
     await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# تحميل (async + cookies)
+# 🔥 التحميل (مع fallback حقيقي)
 async def download_async(url, mode):
 
     def run():
-        ydl_opts = {
+
+        base_opts = {
             'outtmpl': 'file.%(ext)s',
             'quiet': True,
             'noplaylist': True,
-            'cookiefile': COOKIE_FILE,  # 🔥 مهم
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0'
-            }
+            'cookiefile': COOKIE_FILE,
         }
 
+        # 🎧 صوت
         if mode == "audio":
-            ydl_opts.update({
+            base_opts.update({
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
                 }]
             })
-        else:
-            ydl_opts.update({
-                'format': 'best'
-            })
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+            with yt_dlp.YoutubeDL(base_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
 
-            if mode == "audio":
-                return os.path.splitext(filename)[0] + ".mp3"
-            return filename
+        # 🎥 فيديو (🔥 الحل الحقيقي)
+        try:
+            opts = base_opts.copy()
+            opts['format'] = 'best/bestvideo+bestaudio'
+
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                return ydl.prepare_filename(info)
+
+        except:
+            # fallback نهائي
+            opts = base_opts.copy()
+            opts['format'] = 'best'
+
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                return ydl.prepare_filename(info)
 
     return await asyncio.to_thread(run)
 
@@ -90,11 +99,9 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = await download_async(url, mode)
 
         if mode == "audio":
-            with open(file_path, "rb") as f:
-                await context.bot.send_audio(user_id, audio=f)
+            await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
         else:
-            with open(file_path, "rb") as f:
-                await context.bot.send_video(user_id, video=f)
+            await context.bot.send_video(user_id, video=open(file_path, 'rb'))
 
         os.remove(file_path)
 

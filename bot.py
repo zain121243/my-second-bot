@@ -76,59 +76,84 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ⬇️ تحميل (🔥 بدون cookies + مقاومة الحظر)
+# ⬇️ تحميل (🔥 نسخة قوية جدًا بدون cookies)
 def download_video(url, quality):
 
-    ydl_opts = {
+    base_opts = {
         'outtmpl': 'file.%(ext)s',
         'quiet': True,
         'noplaylist': True,
         'geo_bypass': True,
         'nocheckcertificate': True,
         'force_ipv4': True,
-
-        # 🔥 انتحال جهاز اندرويد
-        'http_headers': {
-            'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; Android 11)'
-        },
-
-        # 🔥 تغيير الـ player لتقليل الحظر
-        'extractor_args': {
-            'youtube': {
-                'player_client': ['android', 'web'],
-                'skip': ['hls', 'dash']
-            }
-        },
-
-        # 🔥 تقليل كشف البوت
         'sleep_interval': 1,
         'max_sleep_interval': 3,
     }
 
-    # 🎧 صوت
-    if quality == "audio":
-        ydl_opts.update({
-            'format': 'ba/b',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }]
-        })
+    strategies = [
+        # 🟢 Android
+        {
+            **base_opts,
+            'http_headers': {
+                'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; Android 11)'
+            },
+            'extractor_args': {
+                'youtube': {'player_client': ['android']}
+            }
+        },
+        # 🟡 Web
+        {
+            **base_opts,
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0'
+            },
+            'extractor_args': {
+                'youtube': {'player_client': ['web']}
+            }
+        },
+        # 🔵 iOS
+        {
+            **base_opts,
+            'http_headers': {
+                'User-Agent': 'com.google.ios.youtube/17.33.2'
+            },
+            'extractor_args': {
+                'youtube': {'player_client': ['ios']}
+            }
+        }
+    ]
 
-    # 🎥 فيديو
-    else:
-        ydl_opts.update({
-            'format': f'bestvideo[height<={quality}]+bestaudio/best'
-        })
+    last_error = None
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    for opts in strategies:
+        try:
+            if quality == "audio":
+                opts.update({
+                    'format': 'ba/b',
+                    'postprocessors': [{
+                        'key': 'FFmpegExtractAudio',
+                        'preferredcodec': 'mp3',
+                        'preferredquality': '192',
+                    }]
+                })
+            else:
+                opts.update({
+                    'format': f'bestvideo[height<={quality}]+bestaudio/best'
+                })
 
-        if quality == "audio":
-            return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
-        else:
-            return ydl.prepare_filename(info)
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+
+                if quality == "audio":
+                    return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
+                else:
+                    return ydl.prepare_filename(info)
+
+        except Exception as e:
+            last_error = e
+            continue
+
+    raise Exception(f"❌ فشل التحميل بكل الطرق:\n{last_error}")
 
 # 🎯 الأزرار
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -156,7 +181,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(file_path)
 
     except Exception as e:
-        await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
+        await context.bot.send_message(user_id, f"{e}")
 
 # 🚀 تشغيل
 app = ApplicationBuilder().token(TOKEN).build()

@@ -77,7 +77,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ⬇️ تحميل (🔥 الحل النهائي)
+# ⬇️ تحميل (🔥 بدون أخطاء نهائيًا)
 def download_video(url, quality):
 
     if not os.path.exists(COOKIE_FILE):
@@ -87,12 +87,7 @@ def download_video(url, quality):
         'outtmpl': 'file.%(ext)s',
         'quiet': True,
         'noplaylist': True,
-        'geo_bypass': True,
-        'nocheckcertificate': True,
-        'force_ipv4': True,
-
         'cookiefile': COOKIE_FILE,
-
         'http_headers': {
             'User-Agent': 'Mozilla/5.0'
         },
@@ -109,10 +104,10 @@ def download_video(url, quality):
             }]
         })
 
-    # 🎥 فيديو (🔥 fallback ذكي)
+    # 🎥 فيديو (🔥 الحل النهائي)
     else:
         ydl_opts.update({
-            'format': f'bestvideo[height<={quality}]+bestaudio/bestvideo+bestaudio/best'
+            'format': f'best[height<={quality}]/best'
         })
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:

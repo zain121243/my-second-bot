@@ -1,69 +1,43 @@
 import os
-import yt_dlp
+import subprocess
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
 TOKEN = os.getenv("token")
-CHANNEL = "@jbt_313"
-
 user_links = {}
 
-# بدء
+# start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📥 ارسل رابط الفيديو")
+    await update.message.reply_text("📥 ارسل الرابط")
 
 # استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     url = update.message.text.strip()
 
-    if not url.startswith("http"):
-        await update.message.reply_text("❌ رابط غير صحيح")
-        return
-
     user_links[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("🎥 360p", callback_data="360"),
-         InlineKeyboardButton("🎥 720p", callback_data="720")],
-        [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
+        [InlineKeyboardButton("🎥 فيديو", callback_data="video")],
         [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
     ]
 
-    await update.message.reply_text("اختر الجودة:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# تحميل
+# تحميل فعلي (🔥 نفس التيرمنال)
 def download(url, mode):
 
-    ydl_opts = {
-        'outtmpl': 'file.%(ext)s',
-        'quiet': True,
-        'noplaylist': True,
-    }
-
-    # 🎧 صوت
     if mode == "audio":
-        ydl_opts.update({
-            'format': 'bestaudio',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-            }]
-        })
-
-    # 🎥 فيديو (ثابت بدون مشاكل)
+        cmd = f'yt-dlp -x --audio-format mp3 -o "file.%(ext)s" "{url}"'
     else:
-        ydl_opts.update({
-            'format': 'best'
-        })
+        cmd = f'yt-dlp -o "file.%(ext)s" "{url}"'
 
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    subprocess.run(cmd, shell=True)
 
-        if mode == "audio":
-            return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
-        else:
-            return ydl.prepare_filename(info)
+    # البحث عن الملف
+    for file in os.listdir():
+        if file.startswith("file."):
+            return file
 
 # الأزرار
 async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -73,10 +47,6 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     mode = query.data
     url = user_links.get(user_id)
-
-    if not url:
-        await context.bot.send_message(user_id, "❌ ارسل الرابط اولاً")
-        return
 
     await query.edit_message_text("⏳ جاري التحميل...")
 

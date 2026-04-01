@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from telegram.error import BadRequest
 
-TOKEN = "8642196903:AAFQyss8e2IauNuHybQqy1YXg69ninwTEDE"
+TOKEN = "token"
 CHANNEL_USERNAME = "@jbt_313"
 
 user_links = {}

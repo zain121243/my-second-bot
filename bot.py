@@ -1,210 +1,106 @@
-import yt_dlp
 import os
+import yt_dlp
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
-from telegram.error import BadRequest
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-TOKEN = "token"
-CHANNEL_USERNAME = "@jbt_313"
+# ✅ التوكن
+TOKEN = os.getenv("token")
+
+if not TOKEN or TOKEN == "token":
+    raise ValueError("❌ التوكن غلط! حطه في Railway Variables باسم token")
 
 user_links = {}
-processing_users = set()
-
-# رد آمن
-async def safe_reply(update, context, text, reply_markup=None):
-    if update.effective_chat.type == "channel":
-        return  # ❌ لا يرد داخل القناة
-    if update.message:
-        await update.message.reply_text(text, reply_markup=reply_markup)
-    else:
-        await context.bot.send_message(
-            chat_id=update.effective_chat.id,
-            text=text,
-            reply_markup=reply_markup
-        )
-
-# تحقق الاشتراك (تجاهل القناة)
-async def check_sub(update, context):
-    if update.effective_chat.type == "channel":
-        return True
-
-    try:
-        member = await context.bot.get_chat_member(CHANNEL_USERNAME, update.effective_user.id)
-        return member.status in ["member", "administrator", "creator"]
-    except:
-        return False
-
-# زر الاشتراك
-def join_button():
-    return InlineKeyboardMarkup([
-        [InlineKeyboardButton("📢 اشترك بالقناة", url=f"https://t.me/{CHANNEL_USERNAME.replace('@','')}")],
-        [InlineKeyboardButton("✅ تحقق", callback_data="check")]
-    ])
 
 # start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not await check_sub(update, context):
-        await safe_reply(update, context, "❌ اشترك أولاً", join_button())
-        return
-    await safe_reply(update, context, "📥 ارسل رابط الفيديو")
+    await update.message.reply_text("📥 ارسل رابط الفيديو")
 
 # استقبال الرابط
-async def handle_link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_chat.type == "channel":
-        return
-
-    if not await check_sub(update, context):
-        await safe_reply(update, context, "❌ اشترك أولاً", join_button())
-        return
-
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     url = update.message.text.strip()
-    user_links[update.effective_user.id] = url
+
+    if not url.startswith("http"):
+        await update.message.reply_text("❌ رابط غير صحيح")
+        return
+
+    user_links[user_id] = url
 
     keyboard = [
-        [
-            InlineKeyboardButton("🎥 240p", callback_data="v240"),
-            InlineKeyboardButton("🎥 360p", callback_data="v360"),
-            InlineKeyboardButton("🎥 720p", callback_data="v720"),
-        ],
-        [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
+        [InlineKeyboardButton("🎥 فيديو", callback_data="video")],
+        [InlineKeyboardButton("🎧 صوت MP3", callback_data="audio")]
     ]
 
-    await safe_reply(update, context, "🎯 اختر الجودة:", InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# حل مشكلة Query القديمة
-async def safe_answer(query):
-    try:
-        await query.answer()
-    except BadRequest:
-        pass
+# 🔥 تحميل بدون تعليق
+async def download_async(url, mode):
 
-# الأزرار
-async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await safe_answer(query)
-
-    user_id = query.from_user.id
-
-    if user_id in processing_users:
-        await query.message.reply_text("⏳ انتظر...")
-        return
-
-    processing_users.add(user_id)
-
-    try:
-        if query.data == "check":
-            if await check_sub(update, context):
-                await query.message.reply_text("✅ تم الاشتراك")
-            else:
-                await query.message.reply_text("❌ بعدك")
-            return
-
-        if not await check_sub(update, context):
-            await query.message.reply_text("❌ اشترك أولاً", reply_markup=join_button())
-            return
-
-        url = user_links.get(user_id)
-        if not url:
-            await query.message.reply_text("❌ ارسل الرابط")
-            return
-
-        await query.message.reply_text("⏳ جاري التحميل...")
-
-        common_opts = {
-            'outtmpl': '%(id)s.%(ext)s',
-            'noplaylist': True,
+    def run():
+        ydl_opts = {
+            'outtmpl': 'file.%(ext)s',
             'quiet': True,
-            'merge_output_format': 'mp4',
-            'js_runtimes': {
-                'node': {
-                    'path': r"C:\Program Files\nodejs\node.exe"
-                }
-            }
+            'noplaylist': True,
         }
 
-        # 🎥 فيديو
-        if query.data.startswith("v"):
-            quality = query.data.replace("v", "")
-
-            ydl_opts = {
-                **common_opts,
-                'format': f'bestvideo[height<={quality}]+bestaudio/best'
-            }
-
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
-
-            if not filename.endswith(".mp4"):
-                new_name = filename.rsplit(".", 1)[0] + ".mp4"
-                os.rename(filename, new_name)
-                filename = new_name
-
-            size = os.path.getsize(filename)
-
-            with open(filename, 'rb') as f:
-                if size < 50 * 1024 * 1024:
-                    await context.bot.send_video(
-                        chat_id=query.message.chat_id,
-                        video=f,
-                        read_timeout=120,
-                        write_timeout=120
-                    )
-                else:
-                    await context.bot.send_document(
-                        chat_id=query.message.chat_id,
-                        document=f
-                    )
-
-            os.remove(filename)
-
-        # 🎧 صوت
-        elif query.data == "audio":
-            ydl_opts = {
-                **common_opts,
+        if mode == "audio":
+            ydl_opts.update({
                 'format': 'bestaudio/best',
                 'postprocessors': [{
                     'key': 'FFmpegExtractAudio',
                     'preferredcodec': 'mp3',
-                    'preferredquality': '64',
-                }],
-            }
+                }]
+            })
+        else:
+            ydl_opts.update({
+                'format': 'best'
+            })
 
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                filename = ydl.prepare_filename(info)
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            filename = ydl.prepare_filename(info)
 
-            base = os.path.splitext(filename)[0]
-            mp3_file = base + ".mp3"
+            if mode == "audio":
+                return os.path.splitext(filename)[0] + ".mp3"
+            return filename
 
-            if not os.path.exists(mp3_file):
-                mp3_file = filename.replace(".webm", ".mp3").replace(".m4a", ".mp3")
+    return await asyncio.to_thread(run)
 
-            with open(mp3_file, 'rb') as f:
-                await context.bot.send_audio(
-                    chat_id=query.message.chat_id,
-                    audio=f,
-                    read_timeout=120,
-                    write_timeout=120
-                )
+# الأزرار
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
 
-            if os.path.exists(mp3_file):
-                os.remove(mp3_file)
-            if os.path.exists(filename):
-                os.remove(filename)
+    user_id = query.from_user.id
+    mode = query.data
+    url = user_links.get(user_id)
+
+    if not url:
+        await context.bot.send_message(user_id, "❌ ارسل الرابط أولاً")
+        return
+
+    await query.edit_message_text("⏳ جاري التحميل...")
+
+    try:
+        file_path = await download_async(url, mode)
+
+        if mode == "audio":
+            await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
+        else:
+            await context.bot.send_video(user_id, video=open(file_path, 'rb'))
+
+        os.remove(file_path)
 
     except Exception as e:
-        print(e)
-        await query.message.reply_text("❌ فشل التحميل")
-
-    finally:
-        processing_users.discard(user_id)
+        await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
 
 # تشغيل
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_link))
-app.add_handler(CallbackQueryHandler(button))
+app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
+app.add_handler(CallbackQueryHandler(buttons))
 
+print("Bot running...")
 app.run_polling()

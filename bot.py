@@ -4,8 +4,8 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-TOKEN = os.getenv("token")
-CHANNEL = "@jbt_313"  # 🔥 غيره
+TOKEN = os.getenv("8642196903:AAFjfz1pMGY0VnoHvZThzW3ORamwqm9dOiY")
+CHANNEL = "@jbt_313"
 
 user_links = {}
 last_request_time = {}
@@ -34,8 +34,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     await update.message.reply_text(
-        "✨ ياعلي مدد ✨\n\n"
-        "📥 ارسل الرابط"
+        "✨ ياعلي مدد ✨\n\n📥 ارسل الرابط"
     )
 
 # 📩 استقبال الرابط
@@ -68,7 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🎥 360p", callback_data="360"),
          InlineKeyboardButton("🎥 720p", callback_data="720")],
         [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
-        [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
+        [InlineKeyboardButton("🎧 صوت MP3", callback_data="audio")]
     ]
 
     await update.message.reply_text(
@@ -76,7 +75,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ⬇️ تحميل (🔥 نسخة قوية)
+# ⬇️ تحميل
 def download_video(url, quality):
 
     ydl_opts = {
@@ -97,10 +96,11 @@ def download_video(url, quality):
 
     if quality == "audio":
         ydl_opts.update({
-            'format': 'bestaudio',
+            'format': 'ba/b',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
+                'preferredquality': '192',
             }]
         })
     else:
@@ -110,7 +110,11 @@ def download_video(url, quality):
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
-        return ydl.prepare_filename(info)
+
+        if quality == "audio":
+            return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
+        else:
+            return ydl.prepare_filename(info)
 
 # 🎯 الأزرار
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -120,6 +124,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
     quality = query.data
     url = user_links.get(user_id)
+
+    if not url:
+        await context.bot.send_message(user_id, "❌ أرسل الرابط أولاً")
+        return
 
     await query.edit_message_text("⏳ جاري التحميل...")
 

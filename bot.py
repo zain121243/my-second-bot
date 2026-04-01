@@ -14,6 +14,7 @@ if not TOKEN:
 user_links = {}
 last_request_time = {}
 
+# 🔒 تحقق الاشتراك
 async def check_join(user_id, bot):
     try:
         member = await bot.get_chat_member(CHANNEL, user_id)
@@ -21,6 +22,7 @@ async def check_join(user_id, bot):
     except:
         return False
 
+# 🌟 start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -34,6 +36,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("📥 ارسل الرابط")
 
+# 📩 استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
@@ -49,55 +52,78 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user_links[user_id] = url
 
+    # 🔥 رجعنا أزرار الجودات
     keyboard = [
-        [InlineKeyboardButton("🎥 فيديو", callback_data="video")],
-        [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
+        [InlineKeyboardButton("🎥 360p", callback_data="360"),
+         InlineKeyboardButton("🎥 720p", callback_data="720")],
+        [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
+        [InlineKeyboardButton("🎧 صوت MP3", callback_data="audio")]
     ]
 
-    await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("🎬 اختر الجودة", reply_markup=InlineKeyboardMarkup(keyboard))
 
-def download_video(url, mode):
+# ⬇️ تحميل (🔥 بدون أخطاء فورمات)
+def download_video(url, quality):
 
     ydl_opts = {
         'outtmpl': 'file.%(ext)s',
-        'quiet': True,
         'noplaylist': True,
         'cookiefile': COOKIE_FILE,
+        'quiet': True,
     }
 
-    if mode == "audio":
+    # 🎧 صوت
+    if quality == "audio":
         ydl_opts.update({
-            'format': 'bestaudio',
+            'format': 'bestaudio/best',
             'postprocessors': [{
                 'key': 'FFmpegExtractAudio',
                 'preferredcodec': 'mp3',
             }]
         })
 
-    # 🔥 ملاحظة: ماكو format للفيديو نهائيًا
+    # 🎥 فيديو (🔥 الحل النهائي)
+    else:
+        ydl_opts.update({
+            # ياخذ أقرب جودة وإذا ماكو يرجع لأي أفضل فيديو
+            'format': f'best[height<={quality}]/best'
+        })
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         info = ydl.extract_info(url, download=True)
 
-        if mode == "audio":
+        if quality == "audio":
             return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
         else:
             return ydl.prepare_filename(info)
 
+# 🎯 الأزرار
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
-    mode = query.data
+    data = query.data
+
+    if data == "check":
+        if await check_join(user_id, context.bot):
+            await query.edit_message_text("✅ تم التحقق\n📥 ارسل الرابط")
+        else:
+            await query.answer("❌ بعدك غير مشترك", show_alert=True)
+        return
+
     url = user_links.get(user_id)
+
+    if not url:
+        await context.bot.send_message(user_id, "❌ أرسل الرابط أولاً")
+        return
 
     await query.edit_message_text("⏳ جاري التحميل...")
 
     try:
-        file_path = download_video(url, mode)
+        file_path = download_video(url, data)
 
-        if mode == "audio":
+        if data == "audio":
             await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
         else:
             await context.bot.send_video(user_id, video=open(file_path, 'rb'))
@@ -107,6 +133,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
 
+# 🚀 تشغيل
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))

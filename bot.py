@@ -5,42 +5,43 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 
 TOKEN = os.getenv("token")
 CHANNEL = "@jbt_313"
-COOKIE_FILE = "www.youtube.com_cookies.txt"
 
 user_links = {}
 
-async def check_join(user_id, bot):
-    try:
-        member = await bot.get_chat_member(CHANNEL, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except:
-        return False
-
+# بدء
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("📥 ارسل الرابط")
+    await update.message.reply_text("📥 ارسل رابط الفيديو")
 
+# استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     url = update.message.text.strip()
 
+    if not url.startswith("http"):
+        await update.message.reply_text("❌ رابط غير صحيح")
+        return
+
     user_links[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("🎥 فيديو", callback_data="video")],
+        [InlineKeyboardButton("🎥 360p", callback_data="360"),
+         InlineKeyboardButton("🎥 720p", callback_data="720")],
+        [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
         [InlineKeyboardButton("🎧 صوت", callback_data="audio")]
     ]
 
-    await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
+    await update.message.reply_text("اختر الجودة:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-def download_video(url, mode):
+# تحميل
+def download(url, mode):
 
     ydl_opts = {
         'outtmpl': 'file.%(ext)s',
-        'noplaylist': True,
-        'cookiefile': COOKIE_FILE,
         'quiet': True,
+        'noplaylist': True,
     }
 
+    # 🎧 صوت
     if mode == "audio":
         ydl_opts.update({
             'format': 'bestaudio',
@@ -49,28 +50,23 @@ def download_video(url, mode):
                 'preferredcodec': 'mp3',
             }]
         })
+
+    # 🎥 فيديو (ثابت بدون مشاكل)
     else:
         ydl_opts.update({
             'format': 'best'
         })
 
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
 
-            if mode == "audio":
-                return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
-            else:
-                return ydl.prepare_filename(info)
-
-    except Exception as e:
-        # 🔥 هنا الحل الحقيقي
-        if "Requested format" in str(e):
-            raise Exception("❌ هذا الفيديو ما يسمح بالتحميل من السيرفر (محظور)")
+        if mode == "audio":
+            return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
         else:
-            raise e
+            return ydl.prepare_filename(info)
 
-async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# الأزرار
+async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
@@ -78,10 +74,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     mode = query.data
     url = user_links.get(user_id)
 
+    if not url:
+        await context.bot.send_message(user_id, "❌ ارسل الرابط اولاً")
+        return
+
     await query.edit_message_text("⏳ جاري التحميل...")
 
     try:
-        file_path = download_video(url, mode)
+        file_path = download(url, mode)
 
         if mode == "audio":
             await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
@@ -91,12 +91,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         os.remove(file_path)
 
     except Exception as e:
-        await context.bot.send_message(user_id, str(e))
+        await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
 
+# تشغيل
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-app.add_handler(CallbackQueryHandler(button_handler))
+app.add_handler(CallbackQueryHandler(buttons))
 
+print("Bot running...")
 app.run_polling()

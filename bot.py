@@ -4,8 +4,8 @@ import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 
-# ✅ التوكن
 TOKEN = os.getenv("token")
+COOKIE_FILE = "www.youtube.com_cookies.txt"
 
 if not TOKEN or TOKEN == "token":
     raise ValueError("❌ التوكن غلط! حطه في Railway Variables باسم token")
@@ -19,7 +19,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # استقبال الرابط
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    url = update.message.text.strip()
+    url = (update.message.text or "").strip()
 
     if not url.startswith("http"):
         await update.message.reply_text("❌ رابط غير صحيح")
@@ -34,7 +34,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("اختر:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-# 🔥 تحميل بدون تعليق
+# تحميل (async + cookies)
 async def download_async(url, mode):
 
     def run():
@@ -42,6 +42,10 @@ async def download_async(url, mode):
             'outtmpl': 'file.%(ext)s',
             'quiet': True,
             'noplaylist': True,
+            'cookiefile': COOKIE_FILE,  # 🔥 مهم
+            'http_headers': {
+                'User-Agent': 'Mozilla/5.0'
+            }
         }
 
         if mode == "audio":
@@ -86,9 +90,11 @@ async def buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
         file_path = await download_async(url, mode)
 
         if mode == "audio":
-            await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
+            with open(file_path, "rb") as f:
+                await context.bot.send_audio(user_id, audio=f)
         else:
-            await context.bot.send_video(user_id, video=open(file_path, 'rb'))
+            with open(file_path, "rb") as f:
+                await context.bot.send_video(user_id, video=f)
 
         os.remove(file_path)
 

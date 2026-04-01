@@ -2,10 +2,18 @@ import os
 import yt_dlp
 import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 
 TOKEN = os.getenv("token")
 CHANNEL = "@jbt_313"
+COOKIE_FILE = "www.youtube.com_cookies.txt"
 
 if not TOKEN:
     raise ValueError("❌ حط التوكن بمتغير البيئة باسم token")
@@ -13,21 +21,21 @@ if not TOKEN:
 user_links = {}
 last_request_time = {}
 
-# 🔒 تحقق الاشتراك
+
 async def check_join(user_id, bot):
     try:
         member = await bot.get_chat_member(CHANNEL, user_id)
         return member.status in ["member", "administrator", "creator"]
-    except:
+    except Exception:
         return False
 
-# 🌟 start
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not await check_join(user_id, context.bot):
         keyboard = [
-            [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@','')}")],
+            [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@', '')}")],
             [InlineKeyboardButton("✅ تحقق", callback_data="check")]
         ]
         await update.message.reply_text(
@@ -38,16 +46,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text("✨ ياعلي مدد ✨\n\n📥 ارسل الرابط")
 
-# 📩 استقبال الرابط
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     if not await check_join(user_id, context.bot):
         keyboard = [
-            [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@','')}")],
+            [InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@', '')}")],
             [InlineKeyboardButton("✅ تحقق", callback_data="check")]
         ]
-        await update.message.reply_text("🔒 اشترك أولاً", reply_markup=InlineKeyboardMarkup(keyboard))
+        await update.message.reply_text(
+            "🔒 اشترك أولاً",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
         return
 
     now = asyncio.get_event_loop().time()
@@ -56,7 +67,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     last_request_time[user_id] = now
 
-    url = update.message.text.strip()
+    url = (update.message.text or "").strip()
 
     if not url.startswith(("http://", "https://")):
         await update.message.reply_text("❌ رابط غير صحيح")
@@ -65,10 +76,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_links[user_id] = url
 
     keyboard = [
-        [InlineKeyboardButton("🎥 360p", callback_data="360"),
-         InlineKeyboardButton("🎥 720p", callback_data="720")],
+        [
+            InlineKeyboardButton("🎥 360p", callback_data="360"),
+            InlineKeyboardButton("🎥 720p", callback_data="720"),
+        ],
         [InlineKeyboardButton("🎥 1080p", callback_data="1080")],
-        [InlineKeyboardButton("🎧 صوت MP3", callback_data="audio")]
+        [InlineKeyboardButton("🎧 صوت MP3", callback_data="audio")],
     ]
 
     await update.message.reply_text(
@@ -76,92 +89,75 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ⬇️ تحميل (🔥 نسخة قوية جدًا بدون cookies)
-def download_video(url, quality):
 
-    base_opts = {
-        'outtmpl': 'file.%(ext)s',
-        'quiet': True,
-        'noplaylist': True,
-        'geo_bypass': True,
-        'nocheckcertificate': True,
-        'force_ipv4': True,
-        'sleep_interval': 1,
-        'max_sleep_interval': 3,
+def build_base_ydl_opts():
+    return {
+        "outtmpl": "file.%(ext)s",
+        "quiet": True,
+        "noplaylist": True,
+        "geo_bypass": True,
+        "nocheckcertificate": True,
+        "force_ipv4": True,
+        "cookiefile": COOKIE_FILE,
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0"
+        },
     }
 
-    strategies = [
-        # 🟢 Android
-        {
-            **base_opts,
-            'http_headers': {
-                'User-Agent': 'com.google.android.youtube/17.31.35 (Linux; Android 11)'
-            },
-            'extractor_args': {
-                'youtube': {'player_client': ['android']}
-            }
-        },
-        # 🟡 Web
-        {
-            **base_opts,
-            'http_headers': {
-                'User-Agent': 'Mozilla/5.0'
-            },
-            'extractor_args': {
-                'youtube': {'player_client': ['web']}
-            }
-        },
-        # 🔵 iOS
-        {
-            **base_opts,
-            'http_headers': {
-                'User-Agent': 'com.google.ios.youtube/17.33.2'
-            },
-            'extractor_args': {
-                'youtube': {'player_client': ['ios']}
-            }
-        }
-    ]
 
-    last_error = None
+def download_video(url, quality):
+    if not os.path.exists(COOKIE_FILE):
+        raise FileNotFoundError(
+            f"❌ ملف الكوكيز غير موجود: {COOKIE_FILE}"
+        )
 
-    for opts in strategies:
-        try:
-            if quality == "audio":
-                opts.update({
-                    'format': 'ba/b',
-                    'postprocessors': [{
-                        'key': 'FFmpegExtractAudio',
-                        'preferredcodec': 'mp3',
-                        'preferredquality': '192',
-                    }]
-                })
-            else:
-                opts.update({
-                    'format': f'bestvideo[height<={quality}]+bestaudio/best'
-                })
+    ydl_opts = build_base_ydl_opts()
 
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(url, download=True)
+    if quality == "audio":
+        ydl_opts.update({
+            "format": "ba/b",
+            "postprocessors": [{
+                "key": "FFmpegExtractAudio",
+                "preferredcodec": "mp3",
+                "preferredquality": "192",
+            }],
+        })
+    else:
+        ydl_opts.update({
+            "format": f"bestvideo[height<={quality}]+bestaudio/best"
+        })
 
-                if quality == "audio":
-                    return os.path.splitext(ydl.prepare_filename(info))[0] + ".mp3"
-                else:
-                    return ydl.prepare_filename(info)
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        info = ydl.extract_info(url, download=True)
 
-        except Exception as e:
-            last_error = e
-            continue
+        if quality == "audio":
+            base_name = os.path.splitext(ydl.prepare_filename(info))[0]
+            mp3_file = base_name + ".mp3"
+            if os.path.exists(mp3_file):
+                return mp3_file
+            raise FileNotFoundError("❌ تم التحميل لكن ملف MP3 لم يتم العثور عليه")
+        else:
+            file_path = ydl.prepare_filename(info)
+            if os.path.exists(file_path):
+                return file_path
+            raise FileNotFoundError("❌ تم التحميل لكن ملف الفيديو لم يتم العثور عليه")
 
-    raise Exception(f"❌ فشل التحميل بكل الطرق:\n{last_error}")
 
-# 🎯 الأزرار
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     user_id = query.from_user.id
-    quality = query.data
+    data = query.data
+
+    if data == "check":
+        if await check_join(user_id, context.bot):
+            await query.edit_message_text("✅ تم التحقق\n📥 ارسل الرابط")
+        else:
+            await query.answer("❌ بعدك غير مشترك", show_alert=True)
+        return
+
+    quality = data
     url = user_links.get(user_id)
 
     if not url:
@@ -170,20 +166,28 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text("⏳ جاري التحميل...")
 
+    file_path = None
     try:
         file_path = download_video(url, quality)
 
         if quality == "audio":
-            await context.bot.send_audio(user_id, audio=open(file_path, 'rb'))
+            with open(file_path, "rb") as f:
+                await context.bot.send_audio(user_id, audio=f)
         else:
-            await context.bot.send_video(user_id, video=open(file_path, 'rb'))
-
-        os.remove(file_path)
+            with open(file_path, "rb") as f:
+                await context.bot.send_video(user_id, video=f)
 
     except Exception as e:
-        await context.bot.send_message(user_id, f"{e}")
+        await context.bot.send_message(user_id, f"❌ خطأ:\n{e}")
 
-# 🚀 تشغيل
+    finally:
+        if file_path and os.path.exists(file_path):
+            try:
+                os.remove(file_path)
+            except Exception:
+                pass
+
+
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
@@ -191,5 +195,4 @@ app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 app.add_handler(CallbackQueryHandler(button_handler))
 
 print("Bot is running...")
-
 app.run_polling()
